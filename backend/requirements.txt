@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+python-jose
+passlib
+sqlalchemy
+opencv-python
+numpy
+ultralytics
+python-multipart
+pydantic[email]

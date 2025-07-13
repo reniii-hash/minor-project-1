@@ -4,7 +4,7 @@
 
 .hero-section {
   height: calc(100vh - 80px);
-  background: linear-gradient(rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.4)), url("background2 copy.JPG")
+  background: linear-gradient(rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.4)), url("background2 copy.jpg")
     center / cover;
   display: flex;
   align-items: center;

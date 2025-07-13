@@ -1,145 +1,127 @@
-"use client"
+"use client";
 
-import { useState, useEffect } from "react"
-import { useNavigate } from "react-router-dom"
-import { getUserDashboard } from "../utils/api"
-import { useAuth } from "../context/AuthContext"
-import "./dashboard.css"
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import "./dashboard.css";
 
-const Dashboard = () => {
-  const navigate = useNavigate()
-  const { user } = useAuth()
-  const [violations, setViolations] = useState([])
+const Dashboard = async () => {
+  const navigate = useNavigate();
+  const [violations, setViolations] = useState([]);
   const [stats, setStats] = useState({
-    total_violations: 0,
-    helmet_violations: 0,
-    vest_violations: 0,
-    today_violations: 0,
-  })
-  const [filter, setFilter] = useState("all")
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
+    totalViolations: 0,
+    helmetViolations: 0,
+    vestViolations: 0,
+    todayViolations: 0,
+  });
+  const [filter, setFilter] = useState("all");
+  const [loading, setLoading] = useState(true);
+
+  // For storing user profile data
+  const [userProfile, setUserProfile] = useState(null);  // New state for user profile info
+
+  const response = await fetch("http://localhost:8000/user/violations", {
+    headers: {
+      Authorization: `Bearer ${localStorage.getItem("token")}`,
+    },
+  });
+  const data = await response.json();
+  setViolations(data);
 
   useEffect(() => {
-    if (user) {
-      loadDashboardData()
-    }
-  }, [user])
+    const loadViolations = async () => {
+      try {
+        const token = JSON.parse(localStorage.getItem("user"))?.token;
 
-  const loadDashboardData = async () => {
-    try {
-      setLoading(true)
-      setError(null)
-
-      console.log("📊 Loading dashboard data...")
-
-      const data = await getUserDashboard()
-
-      if (data && data.success) {
-        console.log("✅ Dashboard data loaded:", data)
-        setViolations(data.violations || [])
-        setStats(
-          data.stats || {
-            total_violations: 0,
-            helmet_violations: 0,
-            vest_violations: 0,
-            today_violations: 0,
+        // Fetch user profile data (username, email, role)
+        const userProfileResponse = await fetch("http://localhost:8000/user/me", {
+          headers: {
+            Authorization: `Bearer ${token}`,
           },
-        )
-      } else {
-        throw new Error("Invalid response format")
+        });
+        const userProfileData = await userProfileResponse.json();
+        setUserProfile(userProfileData);  // Set the user profile info
+
+        const response = await fetch("http://127.0.0.1:8000/user/violations", {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        const data = await response.json();
+        setViolations(data);
+        calculateStats(data);
+        setLoading(false);
+      } catch (error) {
+        console.error("Error loading violations:", error);
+        setLoading(false);
       }
-    } catch (error) {
-      console.error("❌ Error loading dashboard data:", error)
-      setError(error.message)
-    } finally {
-      setLoading(false)
-    }
-  }
+    };
+
+    loadViolations();
+  }, []);
+
+  const calculateStats = (violationsData) => {
+    const today = new Date().toDateString();
+    const todayViolations = violationsData.filter(
+      (v) => new Date(v.date).toDateString() === today
+    ).length;
+
+    const helmetViolations = violationsData.filter(
+      (v) => v.label === "NoHelmet"
+    ).length;
+    const vestViolations = violationsData.filter(
+      (v) => v.label === "NoVest"
+    ).length;
+
+    setStats({
+      totalViolations: violationsData.length,
+      helmetViolations,
+      vestViolations,
+      todayViolations,
+    });
+  };
 
   const filteredViolations = violations.filter((violation) => {
-    if (filter === "all") return true
-    return violation.label === filter
-  })
+    if (filter === "all") return true;
+    return violation.label === filter;
+  });
 
   const clearViolations = async () => {
     if (window.confirm("Are you sure you want to clear all violation records?")) {
       try {
-        // TODO: Implement clear violations API endpoint
-        console.log("Clear violations - to be implemented")
-        await loadDashboardData() // Refresh data
+        setViolations([]);
+        setStats({
+          totalViolations: 0,
+          helmetViolations: 0,
+          vestViolations: 0,
+          todayViolations: 0,
+        });
       } catch (error) {
-        console.error("Error clearing violations:", error)
-        alert("Failed to clear violations")
+        console.error("Error clearing violations:", error);
       }
     }
-  }
+  };
 
   const exportViolations = async () => {
     try {
       const csvContent = [
-        ["Date", "Label", "Confidence", "Person ID", "Image ID"],
-        ...filteredViolations.map((v) => [
-          new Date(v.timestamp).toLocaleString(),
-          v.label,
-          v.confidence,
-          v.person_id,
-          v.image_id,
-        ]),
+        ["Date", "Label", "Confidence"],
+        ...filteredViolations.map((v) => [v.timestamp, v.label, v.confidence]),
       ]
         .map((row) => row.join(","))
-        .join("\n")
+        .join("\n");
 
-      const blob = new Blob([csvContent], { type: "text/csv" })
-      const url = window.URL.createObjectURL(blob)
-      const a = document.createElement("a")
-      a.href = url
-      a.download = `ppe_violations_${new Date().toISOString().split("T")[0]}.csv`
-      a.click()
-      window.URL.revokeObjectURL(url)
+      const blob = new Blob([csvContent], { type: "text/csv" });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "ppe_violations.csv";
+      a.click();
+      window.URL.revokeObjectURL(url);
     } catch (error) {
-      console.error("Error exporting violations:", error)
-      alert("Failed to export data")
+      console.error("Error exporting violations:", error);
     }
-  }
-
-  if (!user) {
-    return (
-      <div className="dashboard">
-        <div className="dashboard-header">
-          <div className="header-content">
-            <div className="header-left">
-              <h1>Authentication Required</h1>
-              <p>Please log in to view your dashboard</p>
-            </div>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  if (error) {
-    return (
-      <div className="dashboard">
-        <div className="dashboard-header">
-          <div className="header-content">
-            <div className="header-left">
-              <h1>Dashboard Error</h1>
-              <p>Failed to load dashboard data</p>
-            </div>
-          </div>
-        </div>
-        <div className="error-container">
-          <div className="error-message">
-            <h3>Error: {error}</h3>
-            <button onClick={loadDashboardData} className="btn btn-primary">
-              Retry
-            </button>
-          </div>
-        </div>
-      </div>
-    )
-  }
+  };
 
   return (
     <div className="dashboard">
@@ -148,21 +130,31 @@ const Dashboard = () => {
         <div className="header-content">
           <div className="header-left">
             <h1>PPE Violations Dashboard</h1>
-            <p>Welcome back, {user.username}! Monitor your safety compliance.</p>
+            <p>Monitor and track safety compliance violations</p>
           </div>
           <div className="header-actions">
-            <button className="btn btn-secondary" onClick={() => navigate("/ppe-detection")}>
+            <button
+              className="btn btn-secondary"
+              onClick={() => navigate("/ppe-detection")}
+            >
               Back to Detection
             </button>
             <button className="btn btn-primary" onClick={exportViolations}>
               Export Data
             </button>
-            <button className="btn btn-secondary" onClick={loadDashboardData}>
-              Refresh
-            </button>
           </div>
         </div>
       </div>
+
+      {/* User Profile */}
+      {userProfile && (
+        <div className="user-profile">
+          <h2>User Profile</h2>
+          <p><strong>Username:</strong> {userProfile.username}</p>
+          <p><strong>Email:</strong> {userProfile.email}</p>
+          <p><strong>Role:</strong> {userProfile.role}</p>
+        </div>
+      )}
 
       {/* Stats Cards */}
       <div className="stats-container">
@@ -170,28 +162,28 @@ const Dashboard = () => {
           <div className="stat-icon">📊</div>
           <div className="stat-content">
             <h3>Total Violations</h3>
-            <p className="stat-number">{stats.total_violations}</p>
+            <p className="stat-number">{stats.totalViolations}</p>
           </div>
         </div>
         <div className="stat-card helmet">
           <div className="stat-icon">⛑️</div>
           <div className="stat-content">
             <h3>Helmet Violations</h3>
-            <p className="stat-number">{stats.helmet_violations}</p>
+            <p className="stat-number">{stats.helmetViolations}</p>
           </div>
         </div>
         <div className="stat-card vest">
           <div className="stat-icon">🦺</div>
           <div className="stat-content">
             <h3>Vest Violations</h3>
-            <p className="stat-number">{stats.vest_violations}</p>
+            <p className="stat-number">{stats.vestViolations}</p>
           </div>
         </div>
         <div className="stat-card today">
           <div className="stat-icon">📅</div>
           <div className="stat-content">
             <h3>Today's Violations</h3>
-            <p className="stat-number">{stats.today_violations}</p>
+            <p className="stat-number">{stats.todayViolations}</p>
           </div>
         </div>
       </div>
@@ -199,15 +191,14 @@ const Dashboard = () => {
       {/* Controls */}
       <div className="controls-container">
         <div className="filters">
-          <select value={filter} onChange={(e) => setFilter(e.target.value)} className="filter-select">
-            <option value="all">All Records ({violations.length})</option>
-            <option value="NoHelmet">
-              Helmet Violations ({violations.filter((v) => v.label === "NoHelmet").length})
-            </option>
-            <option value="NoVest">Vest Violations ({violations.filter((v) => v.label === "NoVest").length})</option>
-            <option value="GoodToGo">
-              Compliant Records ({violations.filter((v) => v.label === "GoodToGo").length})
-            </option>
+          <select
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            className="filter-select"
+          >
+            <option value="all">All Violations</option>
+            <option value="NoHelmet">Helmet Violations</option>
+            <option value="NoVest">Vest Violations</option>
           </select>
         </div>
         <div className="actions">
@@ -221,17 +212,15 @@ const Dashboard = () => {
       <div className="violations-container">
         <div className="violations-header">
           <h2>Violations History</h2>
-          <p>
-            ✅ Connected to backend • Showing {filteredViolations.length} of {violations.length} records
-          </p>
+          <p>Ready for backend integration</p>
         </div>
 
         <div className="table-container">
           <table className="violations-table">
             <thead>
               <tr>
-                <th>Date & Time</th>
-                <th>Violation Type</th>
+                <th>Date</th>
+                <th>Label</th>
                 <th>Confidence</th>
                 <th>Status</th>
               </tr>
@@ -241,57 +230,30 @@ const Dashboard = () => {
                 <tr>
                   <td colSpan="4" className="loading-cell">
                     <div className="loading-spinner"></div>
-                    Loading violations from backend...
+                    Loading violations...
                   </td>
                 </tr>
-              ) : filteredViolations.length === 0 ? (
+              ) : (
                 <tr>
                   <td colSpan="4" className="no-data">
                     <div className="empty-state">
                       <div className="empty-icon">📊</div>
-                      <h3>No Records Found</h3>
+                      <h3>No Violations Found</h3>
                       <p>
-                        {violations.length === 0
-                          ? "Start using PPE detection to see violations here."
-                          : "No records match the current filter."}
+                        Violations will appear here when detected by the PPE
+                        monitoring system.
                       </p>
-                      <p className="backend-note">✅ Connected to backend</p>
+                      <p className="backend-note">Ready for backend integration</p>
                     </div>
                   </td>
                 </tr>
-              ) : (
-                filteredViolations.map((violation, index) => (
-                  <tr
-                    key={violation.id || index}
-                    className={`violation-row ${violation.label.toLowerCase().replace("no", "")}`}
-                  >
-                    <td className="date-cell">{new Date(violation.timestamp).toLocaleString()}</td>
-                    <td>
-                      <span className={`label-badge ${violation.label.toLowerCase().replace("no", "")}`}>
-                        {violation.label === "GoodToGo"
-                          ? "✅ All Good"
-                          : violation.label === "NoHelmet"
-                            ? "⛑️ No Helmet"
-                            : violation.label === "NoVest"
-                              ? "🦺 No Vest"
-                              : violation.label}
-                      </span>
-                    </td>
-                    <td className="confidence-cell">{Math.round(violation.confidence * 100)}%</td>
-                    <td>
-                      <span className={`status-badge ${violation.label === "GoodToGo" ? "good" : "critical"}`}>
-                        {violation.label === "GoodToGo" ? "Compliant" : "Violation"}
-                      </span>
-                    </td>
-                  </tr>
-                ))
               )}
             </tbody>
           </table>
         </div>
       </div>
     </div>
-  )
-}
+  );
+};
 
-export default Dashboard
+export default Dashboard;

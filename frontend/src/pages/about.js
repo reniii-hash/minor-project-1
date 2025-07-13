@@ -2,9 +2,9 @@
 
 import { useNavigate } from "react-router-dom"
 import "./about.css"
-import helmet1 from "./helmet1 copy.JPG"
-import worker from "./main-worker copy.JPG"
-import helmet2 from "./helmet2 copy.JPG"
+import helmet1 from "./helmet1 copy.jpg"
+import worker from "./main-worker copy.jpg"
+import helmet2 from "./helmet2 copy.jpg"
 
 const About = () => {
   const navigate = useNavigate()

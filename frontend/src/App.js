@@ -11,6 +11,7 @@ import Dashboard from "./pages/dashboard"
 import AdminDashboard from "./pages/admindashboard"
 import ProtectedRoute from "./components/ProtectedRoute"
 import "./App.css"
+import ViewViolation from "./pages/viewViolation"
 
 function App() {
   return (
@@ -41,13 +42,21 @@ function App() {
               }
             />
             <Route
-              path="/admin-dashboard"
+              path="/admindashboard"
               element={
                 <ProtectedRoute>
                   <AdminDashboard />
                 </ProtectedRoute>
               }
             />
+            <Route
+  path="/admin/users/:userId/violations"
+  element={
+    <ProtectedRoute>
+      <ViewViolation />
+    </ProtectedRoute>
+  }
+/>
           </Routes>
         </div>
       </Router>

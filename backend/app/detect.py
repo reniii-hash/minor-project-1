@@ -7,7 +7,7 @@ from app import crud
 from datetime import datetime
 
 # Load your trained YOLO model
-model = YOLO('/Users/renilapradhan/backend/train/my_yolov8_model3/weights/best.pt')
+model = YOLO('C:\\Users\\ACER\\OneDrive\\Desktop\\backend12new\\my_yolov8_model3\\weights\\best.pt')
 
 COLOR_MAP = {
     'Helmet': (0, 255, 0),

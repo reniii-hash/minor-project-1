@@ -13,33 +13,31 @@ from app import models
 import shutil
 from datetime import datetime
 from fastapi import APIRouter
-
+from fastapi.responses import StreamingResponse
+import csv
+from io import StringIO
 from app.database import Base, engine
 
-# Create tables
+#Create tables
 Base.metadata.create_all(bind=engine)
 
-# Safely create the fixed admin
+#safely create the fixed admin
 crud.create_fixed_admin_if_not_exists(SessionLocal())
+
 
 api = FastAPI()
 
-# Allow CORS
-origins = ["*"]
+#origins=["http://localhost:3000",
+ #   "http://127.0.0.1:3000"]
+origins=["*"]
 api.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins = origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# ✅ Root endpoint to avoid 404 at /
-@api.get("/")
-def read_root():
-    return {"message": "🚀 FastAPI backend is running"}
-
-# Dependency to get DB session
 def get_db():
     db = SessionLocal()
     try:
@@ -47,7 +45,6 @@ def get_db():
     finally:
         db.close()
 
-# ---------------------- Detection Route ---------------------- #
 @api.post("/detect/")
 async def detect_image(
     file: UploadFile = File(...),
@@ -75,9 +72,10 @@ async def detect_image(
         crud.create_violation(db, {
             "label": "GoodToGo",
             "confidence": 1.0,
-            "timestamp": datetime.utcnow(),
+            "timestamp": datetime(),
             "person_id": "N/A",
-            "image_id": image_id
+            "image_id": image_id,
+            
         }, current_user.id)
 
     # Encode annotated image to base64 for frontend
@@ -89,7 +87,8 @@ async def detect_image(
         "violations": violations
     }
 
-# ---------------------- Admin Endpoints ---------------------- #
+# --- ADMIN ENDPOINTS ---
+
 
 @api.get("/admin/users")
 def list_users(
@@ -115,9 +114,10 @@ def update_user_role(
     current_admin=Depends(get_current_admin)
 ):
     user = crud.update_user_role(db, user_id, new_role)
-    db.commit()
+    db.commit()  # <-- Make sure to commit the transaction!
     return {"detail": "Role updated", "user": user.username if user else None}
 
+# For admin: get violations for any user
 @api.get("/admin/violations/{user_id}", response_model=list[schemas.ViolationOut])
 def get_user_violations_admin(
     user_id: str,
@@ -138,15 +138,38 @@ def admin_summary(
         good_count = sum(1 for v in violations if v.label == "GoodToGo")
         violation_count = sum(1 for v in violations if v.label != "GoodToGo")
         summary.append({
-            "id": user.id,
+            "id": user.id,                
             "username": user.username,
-            "role": user.role,
+            "role": user.role,  
+            "email": user.email,         
             "good_count": good_count,
             "violation_count": violation_count
         })
     return summary
 
-# ---------------------- User Endpoints ---------------------- #
+@api.get("/admin/export")
+def export_user_summary(
+    db: Session = Depends(get_db),
+    current_admin=Depends(get_current_admin)
+):
+    users = crud.get_all_users(db)
+    output = StringIO()
+    writer = csv.writer(output)
+
+    # CSV Header
+    writer.writerow(["Username", "Email", "Role", "Good Count", "Violation Count"])
+
+    for user in users:
+        if user.role != "admin":  # ✅ Skip admin users
+            violations = crud.get_violations_by_user(db, user.id)
+            good_count = sum(1 for v in violations if v.label == "GoodToGo")
+            violation_count = sum(1 for v in violations if v.label != "GoodToGo")
+            writer.writerow([user.username, user.email, user.role, good_count, violation_count])
+
+    output.seek(0)
+    return StreamingResponse(output, media_type="text/csv", headers={
+        "Content-Disposition": "attachment; filename=user_ppe_summary.csv"
+    })
 
 @api.get("/user/dashboard")
 def user_dashboard(
@@ -175,9 +198,10 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
     return {
         "access_token": access_token,
         "token_type": "bearer",
-        "role": user.role
+        "role": user.role  
     }
 
+# For user: get their own violations
 @api.get("/user/violations", response_model=list[schemas.ViolationOut])
 def get_user_violations(
     current_user=Depends(get_current_active_user),
@@ -193,6 +217,7 @@ def get_current_user_details(
     user = crud.get_user_by_username(db, current_user.username)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    
     return {
         "username": user.username,
         "email": user.email,
